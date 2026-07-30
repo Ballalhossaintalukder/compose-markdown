@@ -289,16 +289,31 @@ private fun SampleMarkdown() {
                             | data   | path to data files to supply the data that will be passed into templates. |
                             | engine | engine to be used for processing templates. Handlebars is the default. |
                             | ext    | extension to be used for dest files. |
-                            
+                             
                             Right aligned columns
-                            
+                             
                             | Option | Description |
                             | ------:| -----------:|
                             | data   | path to data files to supply the data that will be passed into templates. |
                             | engine | engine to be used for processing templates. Handlebars is the default. |
                             | ext    | extension to be used for dest files. |
-                            
+                             
                         """.trimIndent(),
+                    )
+                }
+                item {
+                    MarkdownText(
+                        modifier = Modifier.fillMaxWidth(),
+                        markdown = """
+                            ## Table with Links
+
+                            | Framework | Repository | Documentation |
+                            |-----------|-----------|-----------------|
+                            | Kotlin | [GitHub](https://github.com/jetbrains/kotlin) | [Docs](https://kotlinlang.org) |
+                            | Compose | [GitHub](https://github.com/jetbrains/compose-jb) | [Docs](https://www.jetbrains.com/help/compose-multiplatform/) |
+                            | Android | [GitHub](https://github.com/android/android) | [Docs](https://developer.android.com) |
+                             
+                        """.trimIndent()
                     )
                 }
                 item {
