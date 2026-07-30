@@ -6,6 +6,7 @@ import android.text.Layout
 import android.text.Selection
 import android.text.Spannable
 import android.text.SpannableString
+import android.text.Spanned
 import android.text.style.ClickableSpan
 import android.util.AttributeSet
 import android.view.MotionEvent
@@ -140,6 +141,7 @@ class CustomTextView : AppCompatTextView {
         ) {
             val link = getClickableSpans(event)
 
+            // FKZ 01
             if (link.isNotEmpty()) {
                 if (event.action == MotionEvent.ACTION_UP) {
                     link[0].onClick(this)
@@ -227,7 +229,39 @@ class CustomTextView : AppCompatTextView {
         val off = layout.getOffsetForHorizontal(line, x.toFloat())
 
         val spannable = text as? Spannable ?: return emptyArray()
-        return spannable.getSpans(off, off, ClickableSpan::class.java)
+        val directClickableSpans = spannable.getSpans(off, off, ClickableSpan::class.java)
+        if (directClickableSpans.isNotEmpty()) {
+            return directClickableSpans
+        }
+
+        // Table cells render clickable spans inside row-internal layouts.
+        val tableRowSpans = spannable.getSpans(off, off, TableRowSpan::class.java)
+        if (tableRowSpans.isEmpty()) {
+            return emptyArray()
+        }
+
+        val tableRowSpan = tableRowSpans[0]
+        val rowLayout = tableRowSpan.findLayoutForHorizontalOffset(x) ?: return emptyArray()
+        val rowY = layout.getLineTop(line)
+        val rowRelativeY = y - rowY
+        if (rowRelativeY < 0 || rowRelativeY >= rowLayout.height) {
+            return emptyArray()
+        }
+
+        val rowLine = rowLayout.getLineForVertical(rowRelativeY)
+        if (rowLine < 0 || rowLine >= rowLayout.lineCount) {
+            return emptyArray()
+        }
+
+        val cellWidth = tableRowSpan.cellWidth()
+        if (cellWidth <= 0) {
+            return emptyArray()
+        }
+
+        // Map touch coordinates into the tapped table cell layout.
+        val rowOff = rowLayout.getOffsetForHorizontal(rowLine, (x % cellWidth).toFloat())
+        val rowText = rowLayout.text as? Spanned ?: return emptyArray()
+        return rowText.getSpans(rowOff, rowOff, ClickableSpan::class.java)
     }
 
     override fun performClick(): Boolean {
