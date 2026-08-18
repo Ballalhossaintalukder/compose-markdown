@@ -269,6 +269,17 @@ class MarkdownComplexRenderingTest {
         composeTestRule.onNodeWithTag("table_link_tap").assertExists()
         composeTestRule.waitForIdle()
 
+        // waitForIdle() only waits for Compose to settle; the embedded AndroidView may still be
+        // in its measure/layout pass on slower CI emulators. Wait until the TextView is fully
+        // laid out (width > 0) so that cell-count calculation in tapTableLink is correct.
+        composeTestRule.waitUntil(timeoutMillis = 5_000) {
+            val activity = getCurrentActivity() ?: return@waitUntil false
+            val tv = findTextViews(activity.window.decorView)
+                .filterIsInstance<CustomTextView>()
+                .firstOrNull { it.text.toString().contains("Table callback test") }
+            tv != null && tv.width > 0 && tv.layout != null
+        }
+
         composeTestRule.runOnIdle {
             val textView = requireTextViewContaining("Table callback test")
             tapTableLink(textView, "Table Link")
