@@ -269,26 +269,16 @@ class MarkdownComplexRenderingTest {
         composeTestRule.onNodeWithTag("table_link_tap").assertExists()
         composeTestRule.waitForIdle()
 
-        // waitForIdle() only waits for Compose to settle; the embedded AndroidView may still be
-        // in its measure/layout pass on slower CI emulators. Wait until the TextView is fully
-        // laid out AND drawn so that TableRowSpan.cellWidth() (set inside draw()) is non-zero,
-        // which is required for cell-count calculation in tapTableLink to be correct.
-        // ActivityLifecycleMonitorRegistry requires the main thread, so everything goes inside
-        // runOnMainSync; isReady is written from main and read from the test thread after sync.
         composeTestRule.waitUntil(timeoutMillis = 5_000) {
-            // getCurrentActivity() uses ActivityLifecycleMonitorRegistry which must be
-            // called on the instrumentation thread, not the main thread.
-            val activity = getCurrentActivity() ?: return@waitUntil false
             var isReady = false
             InstrumentationRegistry.getInstrumentation().runOnMainSync {
+                val activity = getCurrentActivity() ?: return@runOnMainSync
                 val tv = findTextViews(activity.window.decorView)
                     .filterIsInstance<CustomTextView>()
                     .firstOrNull { it.text.toString().contains("Table callback test") }
                 if (tv != null && tv.width > 0 && tv.layout != null) {
                     val spannable = tv.text as? Spannable
                     val rowSpans = spannable?.getSpans(0, spannable.length, TableRowSpan::class.java)
-                    // cellWidth() is derived from TableRowSpan.width which is set in draw();
-                    // a value of 0 means the span has not yet been painted.
                     isReady = rowSpans != null && rowSpans.isNotEmpty() && rowSpans.all { it.cellWidth() > 0 }
                 }
             }
