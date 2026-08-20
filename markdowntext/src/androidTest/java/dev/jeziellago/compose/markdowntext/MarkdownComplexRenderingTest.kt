@@ -975,7 +975,6 @@ class MarkdownComplexRenderingTest {
             ?: error("Text is not spannable for table link tap")
         val layout = checkNotNull(textView.layout) { "TextView layout is null for table link tap" }
         val rowSpans = spannable.getSpans(0, spannable.length, TableRowSpan::class.java)
-        val contentWidth = textView.width - textView.totalPaddingLeft - textView.totalPaddingRight
 
         for (rowSpan in rowSpans) {
             val outerSpanStart = spannable.getSpanStart(rowSpan)
@@ -984,29 +983,32 @@ class MarkdownComplexRenderingTest {
             val cellWidth = rowSpan.cellWidth()
             if (cellWidth <= 0) continue
 
-            val cells = (contentWidth / cellWidth).coerceAtLeast(1)
-            for (cellIndex in 0 until cells) {
+            var cellIndex = 0
+            while (true) {
                 val probeX = cellIndex * cellWidth + cellWidth / 2
-                val rowLayout = rowSpan.findLayoutForHorizontalOffset(probeX) ?: continue
-                val rowText = rowLayout.text as? Spanned ?: continue
-                val targetSpan = rowText.getSpans(0, rowText.length, ClickableSpan::class.java)
-                    .firstOrNull { span ->
-                        val start = rowText.getSpanStart(span)
-                        val end = rowText.getSpanEnd(span)
-                        start >= 0 && end > start && rowText.subSequence(start, end).toString() == linkText
-                    } ?: continue
-
-                val start = rowText.getSpanStart(targetSpan)
-                val end = rowText.getSpanEnd(targetSpan)
-                val rowOffset = start + ((end - start) / 2)
-                val rowLine = rowLayout.getLineForOffset(rowOffset)
-                val x = cellIndex * cellWidth + rowLayout.getPrimaryHorizontal(rowOffset) + textView.totalPaddingLeft
-                val y = layout.getLineTop(outerLine) +
-                    (rowLayout.getLineTop(rowLine) + rowLayout.getLineBottom(rowLine)) / 2f +
-                    textView.totalPaddingTop
-
-                tapAt(textView, x, y)
-                return
+                val rowLayout = rowSpan.findLayoutForHorizontalOffset(probeX) ?: break
+                val rowText = rowLayout.text as? Spanned
+                if (rowText != null) {
+                    val targetSpan = rowText.getSpans(0, rowText.length, ClickableSpan::class.java)
+                        .firstOrNull { span ->
+                            val start = rowText.getSpanStart(span)
+                            val end = rowText.getSpanEnd(span)
+                            start >= 0 && end > start && rowText.subSequence(start, end).toString() == linkText
+                        }
+                    if (targetSpan != null) {
+                        val start = rowText.getSpanStart(targetSpan)
+                        val end = rowText.getSpanEnd(targetSpan)
+                        val rowOffset = start + ((end - start) / 2)
+                        val rowLine = rowLayout.getLineForOffset(rowOffset)
+                        val x = cellIndex * cellWidth + rowLayout.getPrimaryHorizontal(rowOffset) + textView.totalPaddingLeft
+                        val y = layout.getLineTop(outerLine) +
+                            (rowLayout.getLineTop(rowLine) + rowLayout.getLineBottom(rowLine)) / 2f +
+                            textView.totalPaddingTop
+                        tapAt(textView, x, y)
+                        return
+                    }
+                }
+                cellIndex++
             }
         }
 
