@@ -4,7 +4,9 @@ import android.app.Activity
 import android.graphics.Paint
 import android.graphics.drawable.Drawable
 import android.text.Spannable
+import android.text.Spanned
 import android.text.style.*
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
@@ -31,6 +33,7 @@ import androidx.test.runner.lifecycle.Stage
 import androidx.test.platform.app.InstrumentationRegistry
 import coil3.ImageLoader
 import coil3.request.crossfade
+import io.noties.markwon.ext.tables.TableRowSpan
 import org.hamcrest.Description
 import org.hamcrest.Matcher
 import org.hamcrest.Matchers.allOf
@@ -212,6 +215,82 @@ class MarkdownComplexRenderingTest {
                 isDisplayed(),
                 hasClickableSpans()
             )))
+    }
+
+    @Test
+    fun testRegularLinkTapInvokesCallback() {
+        val markdown = """
+            Regular callback link: [Regular Link](https://regular-link.test)
+        """.trimIndent()
+        var clickedLink = ""
+
+        composeTestRule.setContent {
+            MaterialTheme {
+                MarkdownText(
+                    markdown = markdown,
+                    modifier = Modifier.testTag("regular_link_tap"),
+                    onLinkClicked = { url -> clickedLink = url }
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag("regular_link_tap").assertExists()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.runOnIdle {
+            val textView = requireTextViewContaining("Regular callback link:")
+            tapRegularLink(textView, "Regular Link")
+        }
+
+        assert(clickedLink == "https://regular-link.test")
+    }
+
+    @Test
+    fun testTableLinkTapInvokesCallback() {
+        val markdown = """
+            Table callback test
+            
+            | Name | Link |
+            |---|---|
+            | Item | [Table Link](https://table-link.test) |
+        """.trimIndent()
+        var clickedLink = ""
+
+        composeTestRule.setContent {
+            MaterialTheme {
+                MarkdownText(
+                    markdown = markdown,
+                    modifier = Modifier.testTag("table_link_tap"),
+                    onLinkClicked = { url -> clickedLink = url }
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag("table_link_tap").assertExists()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.waitUntil(timeoutMillis = 5_000) {
+            var isReady = false
+            InstrumentationRegistry.getInstrumentation().runOnMainSync {
+                val activity = getCurrentActivity() ?: return@runOnMainSync
+                val tv = findTextViews(activity.window.decorView)
+                    .filterIsInstance<CustomTextView>()
+                    .firstOrNull { it.text.toString().contains("Table callback test") }
+                if (tv != null && tv.width > 0 && tv.layout != null) {
+                    val spannable = tv.text as? Spannable
+                    val rowSpans = spannable?.getSpans(0, spannable.length, TableRowSpan::class.java)
+                    isReady = rowSpans != null && rowSpans.isNotEmpty() && rowSpans.all { it.cellWidth() > 0 }
+                }
+            }
+            isReady
+        }
+
+        composeTestRule.runOnIdle {
+            val textView = requireTextViewContaining("Table callback test")
+            tapTableLink(textView, "Table Link")
+        }
+
+        assert(clickedLink == "https://table-link.test")
     }
 
     @Test
@@ -853,5 +932,98 @@ class MarkdownComplexRenderingTest {
             textViews += findTextViews(root.getChildAt(index))
         }
         return textViews
+    }
+
+    private fun requireTextViewContaining(text: String): CustomTextView {
+        val activity = checkNotNull(getCurrentActivity()) {
+            "No resumed activity found"
+        }
+
+        val textView = findTextViews(activity.window.decorView)
+            .filterIsInstance<CustomTextView>()
+            .firstOrNull { it.text.toString().contains(text) }
+
+        return checkNotNull(textView) {
+            "No CustomTextView found containing: $text"
+        }
+    }
+
+    private fun tapRegularLink(textView: CustomTextView, linkText: String) {
+        val spannable = textView.text as? Spannable
+            ?: error("Text is not spannable for regular link tap")
+        val layout = checkNotNull(textView.layout) { "TextView layout is null for regular link tap" }
+
+        val targetSpan = spannable.getSpans(0, spannable.length, ClickableSpan::class.java)
+            .firstOrNull { span ->
+                val start = spannable.getSpanStart(span)
+                val end = spannable.getSpanEnd(span)
+                start in 0..<end && spannable.subSequence(start, end).toString() == linkText
+            } ?: error("No clickable span found for regular link text: $linkText")
+
+        val start = spannable.getSpanStart(targetSpan)
+        val end = spannable.getSpanEnd(targetSpan)
+        val offset = start + ((end - start) / 2)
+        val line = layout.getLineForOffset(offset)
+        val x = layout.getPrimaryHorizontal(offset) + textView.totalPaddingLeft
+        val y = (layout.getLineTop(line) + layout.getLineBottom(line)) / 2f + textView.totalPaddingTop
+
+        tapAt(textView, x, y)
+    }
+
+    private fun tapTableLink(textView: CustomTextView, linkText: String) {
+        val spannable = textView.text as? Spannable
+            ?: error("Text is not spannable for table link tap")
+        val layout = checkNotNull(textView.layout) { "TextView layout is null for table link tap" }
+        val rowSpans = spannable.getSpans(0, spannable.length, TableRowSpan::class.java)
+
+        for (rowSpan in rowSpans) {
+            val outerSpanStart = spannable.getSpanStart(rowSpan)
+            if (outerSpanStart < 0) continue
+            val outerLine = layout.getLineForOffset(outerSpanStart)
+            val cellWidth = rowSpan.cellWidth()
+            if (cellWidth <= 0) continue
+
+            var cellIndex = 0
+            while (true) {
+                val probeX = cellIndex * cellWidth + cellWidth / 2
+                val rowLayout = rowSpan.findLayoutForHorizontalOffset(probeX) ?: break
+                val rowText = rowLayout.text as? Spanned
+                if (rowText != null) {
+                    val targetSpan = rowText.getSpans(0, rowText.length, ClickableSpan::class.java)
+                        .firstOrNull { span ->
+                            val start = rowText.getSpanStart(span)
+                            val end = rowText.getSpanEnd(span)
+                            start >= 0 && end > start && rowText.subSequence(start, end).toString() == linkText
+                        }
+                    if (targetSpan != null) {
+                        val start = rowText.getSpanStart(targetSpan)
+                        val end = rowText.getSpanEnd(targetSpan)
+                        val rowOffset = start + ((end - start) / 2)
+                        val rowLine = rowLayout.getLineForOffset(rowOffset)
+                        val x = cellIndex * cellWidth + rowLayout.getPrimaryHorizontal(rowOffset) + textView.totalPaddingLeft
+                        val y = layout.getLineTop(outerLine) +
+                            (rowLayout.getLineTop(rowLine) + rowLayout.getLineBottom(rowLine)) / 2f +
+                            textView.totalPaddingTop
+                        tapAt(textView, x, y)
+                        return
+                    }
+                }
+                cellIndex++
+            }
+        }
+
+        error("No clickable table span found for table link text: $linkText")
+    }
+
+    private fun tapAt(textView: CustomTextView, x: Float, y: Float) {
+        val down = MotionEvent.obtain(0L, 0L, MotionEvent.ACTION_DOWN, x, y, 0)
+        val up = MotionEvent.obtain(0L, 16L, MotionEvent.ACTION_UP, x, y, 0)
+        try {
+            textView.onTouchEvent(down)
+            textView.onTouchEvent(up)
+        } finally {
+            down.recycle()
+            up.recycle()
+        }
     }
 }

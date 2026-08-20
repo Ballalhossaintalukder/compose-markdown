@@ -3,7 +3,6 @@ package dev.jeziellago.compose.markdowntext
 import android.content.Context
 import android.os.Build
 import android.text.Spanned
-import android.text.method.LinkMovementMethod
 import android.text.util.Linkify
 import android.view.View
 import android.widget.TextView
@@ -26,6 +25,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.widget.TextViewCompat
 import coil3.ImageLoader
 import io.noties.markwon.Markwon
+import io.noties.markwon.ext.tables.TableAwareMovementMethod
 
 @Composable
 fun MarkdownText(
@@ -114,7 +114,7 @@ fun MarkdownText(
                     movementMethod = if (disableLinkMovementMethod) {
                         null
                     } else {
-                        LinkMovementMethod.getInstance()
+                        TableAwareMovementMethod.create()
                     }
 
                     if (truncateOnTextOverflow) enableTextOverflow()
@@ -136,7 +136,7 @@ fun MarkdownText(
                 // Clear previous state before rendering new content
                 // This prevents corruption when views are reused in LazyColumn
                 textView.resetTextState()
-                
+
                 with(textView) {
                     applyTextColor(style.color.takeOrElse { defaultColor }.toArgb())
                     applyFontSize(style)
@@ -159,7 +159,7 @@ fun MarkdownText(
                 textView.movementMethod = if (disableLinkMovementMethod) {
                     null
                 } else {
-                    LinkMovementMethod.getInstance()
+                    TableAwareMovementMethod.create()
                 }
                 if (onTextLayout != null) {
                     textView.post {
