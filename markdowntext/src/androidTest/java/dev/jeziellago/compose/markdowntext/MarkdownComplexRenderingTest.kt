@@ -273,6 +273,8 @@ class MarkdownComplexRenderingTest {
         // in its measure/layout pass on slower CI emulators. Wait until the TextView is fully
         // laid out AND drawn so that TableRowSpan.cellWidth() (set inside draw()) is non-zero,
         // which is required for cell-count calculation in tapTableLink to be correct.
+        // ActivityLifecycleMonitorRegistry requires the main thread, so everything goes inside
+        // runOnMainSync; isReady is written from main and read from the test thread after sync.
         composeTestRule.waitUntil(timeoutMillis = 5_000) {
             // getCurrentActivity() uses ActivityLifecycleMonitorRegistry which must be
             // called on the instrumentation thread, not the main thread.
